@@ -125,6 +125,32 @@ chrome.webRequest.onErrorOccurred.addListener(
   { urls: ["<all_urls>"] }
 );
 
+// 监听转发请求到 content script 的消息
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "forwardRequestsToContentScript") {
+    // 获取当前活动的 tab
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs.length > 0 && tabs[0].id) {
+        // 将录制的请求发送给 content script
+        chrome.tabs.sendMessage(tabs[0].id, {
+          action: "forwardRecordedRequests",
+          requests: recordedRequests
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error("Error sending message to content script:", chrome.runtime.lastError);
+            sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            sendResponse({ success: true, response });
+          }
+        });
+      } else {
+        sendResponse({ success: false, error: "No active tab found" });
+      }
+    });
+    return true; // 保持消息通道开放以支持异步响应
+  }
+});
+
 // 监听回放请求
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "replayRequests" && recordedRequests.length > 0) {

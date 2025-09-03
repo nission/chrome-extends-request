@@ -24,6 +24,11 @@ export interface ClearRequestsMessage extends ChromeMessage {
   action: "clearRecordedRequests";
 }
 
+// 转发请求到 content script 的消息类型
+export interface ForwardRequestsMessage extends ChromeMessage {
+  action: "forwardRequestsToContentScript";
+}
+
 // 录制的请求数据结构
 export interface RecordedRequest {
   url: string;

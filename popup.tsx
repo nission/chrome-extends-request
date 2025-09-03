@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import "./styles/globals.css"
 
 interface RecordedRequest {
   url: string;
@@ -12,6 +13,7 @@ function IndexPopup() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordedRequests, setRecordedRequests] = useState<RecordedRequest[]>([])
   const [isReplaying, setIsReplaying] = useState(false)
+  const [isForwarding, setIsForwarding] = useState(false)
 
   // 页面加载时获取录制状态和已录制的请求
   useEffect(() => {
@@ -61,6 +63,24 @@ function IndexPopup() {
     })
   }
 
+  // 转发请求到 content script
+  const forwardRequests = () => {
+    if (recordedRequests.length === 0) {
+      alert("没有录制的请求可以转发")
+      return
+    }
+
+    setIsForwarding(true)
+    chrome.runtime.sendMessage({ action: "forwardRequestsToContentScript" }, (response) => {
+      setIsForwarding(false)
+      if (response && response.success) {
+        alert("请求已成功转发到 content script")
+      } else {
+        alert(`请求转发失败: ${response?.error || "未知错误"}`)
+      }
+    })
+  }
+
   // 清空录制的请求
   const clearRequests = () => {
     chrome.runtime.sendMessage({ action: "clearRecordedRequests" }, (response) => {
@@ -70,31 +90,20 @@ function IndexPopup() {
       }
     })
   }
-
   return (
-    <div
-      style={{
-        padding: 16,
-        minWidth: 300,
-        fontFamily: "Arial, sans-serif"
-      }}>
-      <h2 style={{ margin: "0 0 16px 0", fontSize: "18px" }}>
+    <div className="min-w-[340px] max-w-[420px] p-4 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-xl shadow border border-neutral-200 font-sans">
+      <h2 className="text-xl font-bold mb-4">
         Request Recorder
       </h2>
       
-      <div style={{ marginBottom: 16 }}>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
           onClick={toggleRecording}
-          style={{
-            padding: "10px 16px",
-            backgroundColor: isRecording ? "#dc3545" : "#007bff",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            marginRight: "8px",
-            fontSize: "14px"
-          }}
+          className={`px-4 py-2 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+            isRecording
+              ? "bg-red-500 hover:bg-red-600 text-white"
+              : "bg-blue-500 hover:bg-blue-600 text-white"
+          }`}
           disabled={isReplaying}
         >
           {isRecording ? "停止录制" : "开始录制"}
@@ -102,73 +111,67 @@ function IndexPopup() {
         
         <button
           onClick={replayRequests}
-          style={{
-            padding: "10px 16px",
-            backgroundColor: "#28a745",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            marginRight: "8px",
-            fontSize: "14px"
-          }}
+          className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={isReplaying || recordedRequests.length === 0}
         >
           {isReplaying ? "回放中..." : "回放请求"}
         </button>
-        
+        <button
+          onClick={forwardRequests}
+          className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-black rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={isForwarding || recordedRequests.length === 0}
+        >
+          {isForwarding ? "转发中..." : "转发请求"}
+        </button>
         <button
           onClick={clearRequests}
-          style={{
-            padding: "10px 16px",
-            backgroundColor: "#6c757d",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-            fontSize: "14px"
-          }}
+          className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={isReplaying}
         >
           清空记录
         </button>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <p style={{ margin: "0 0 8px 0", fontSize: "14px", fontWeight: "bold" }}>
-          录制状态: <span style={{ color: isRecording ? "#28a745" : "#dc3545" }}>
+      <div className="mb-4">
+        <p className="text-sm mb-1">
+          录制状态:
+          <span
+            className={`ml-2 inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
+              isRecording ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+            }`}
+          >
             {isRecording ? "录制中" : "已停止"}
           </span>
         </p>
-        <p style={{ margin: "0", fontSize: "14px" }}>
+        <p className="text-xs text-neutral-500">
           已录制请求数量: {recordedRequests.length}
         </p>
       </div>
 
       {recordedRequests.length > 0 && (
         <div>
-          <h3 style={{ margin: "0 0 8px 0", fontSize: "16px" }}>录制的请求:</h3>
-          <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+          <h3 className="text-base font-medium mb-2">录制的请求</h3>
+          <div className="max-h-[200px] overflow-y-auto">
             {recordedRequests.map((request, index) => (
               <div
                 key={index}
-                style={{
-                  padding: "8px",
-                  marginBottom: "8px",
-                  backgroundColor: "#f8f9fa",
-                  borderRadius: "4px",
-                  fontSize: "12px"
-                }}
+                className="p-2 mb-2 bg-gray-100 rounded text-xs"
               >
-                <div style={{ fontWeight: "bold" }}>
+                <div className="font-bold">
                   {request.method} {request.url}
                 </div>
-                <div style={{ color: "#6c757d" }}>
+                <div className="text-gray-500">
                   {new Date(request.timestamp).toLocaleString()}
                 </div>
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {recordedRequests.length === 0 && (
+        <div className="mt-2 rounded-lg border border-dashed border-neutral-200 p-4 text-sm text-neutral-500">
+          暂无录制请求
         </div>
       )}
     </div>
