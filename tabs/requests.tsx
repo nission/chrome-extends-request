@@ -9,22 +9,68 @@ function RequestsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedMethod, setSelectedMethod] = useState<string>("all")
 
+  // 检查扩展上下文是否有效
+  const isExtensionContextValid = (): boolean => {
+    try {
+      return !!(chrome && chrome.runtime && chrome.runtime.id);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // 安全的消息发送函数
+  const safeSendMessage = (message: any, callback?: (response: any) => void) => {
+    try {
+      if (!isExtensionContextValid()) {
+        console.warn('Extension context is invalid');
+        if (callback) callback({ success: false, error: 'Extension context invalidated' });
+        return;
+      }
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Runtime error:', chrome.runtime.lastError);
+          if (callback) callback({ success: false, error: chrome.runtime.lastError.message });
+        } else {
+          if (callback) callback(response);
+        }
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      if (callback) callback({ success: false, error: error.message });
+    }
+  }
+
   // 页面加载时获取录制的请求
   useEffect(() => {
-    chrome.runtime.sendMessage({ action: "getRecordedRequests" }, (response) => {
-      if (response && response.requests) {
-        setRecordedRequests(response.requests)
+    if (!isExtensionContextValid()) {
+      console.warn('Extension context is not available');
+      return;
+    }
+
+    safeSendMessage({ action: "getRecordedRequests" }, (response) => {
+      if (response && response.success !== false && response.requests) {
+        setRecordedRequests(response.requests);
+      } else if (response && response.error) {
+        console.error('Failed to get recorded requests:', response.error);
       }
-    })
+    });
   }, [])
 
   // 刷新请求列表
   const refreshRequests = () => {
-    chrome.runtime.sendMessage({ action: "getRecordedRequests" }, (response) => {
-      if (response && response.requests) {
-        setRecordedRequests(response.requests)
+    if (!isExtensionContextValid()) {
+      alert("扩展上下文已失效，请重新加载扩展");
+      return;
+    }
+
+    safeSendMessage({ action: "getRecordedRequests" }, (response) => {
+      if (response && response.success !== false && response.requests) {
+        setRecordedRequests(response.requests);
+      } else if (response && response.error) {
+        console.error('Failed to refresh requests:', response.error);
+        alert(`刷新失败: ${response.error}`);
       }
-    })
+    });
   }
 
   // 打开请求详情弹窗

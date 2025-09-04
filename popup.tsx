@@ -15,80 +15,161 @@ function IndexPopup() {
   const [isReplaying, setIsReplaying] = useState(false)
   const [isForwarding, setIsForwarding] = useState(false)
 
+  // 检查扩展上下文是否有效
+  const isExtensionContextValid = (): boolean => {
+    try {
+      return !!(chrome && chrome.runtime && chrome.runtime.id);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // 安全的消息发送函数
+  const safeSendMessage = (message: any, callback?: (response: any) => void) => {
+    try {
+      if (!isExtensionContextValid()) {
+        console.warn('Extension context is invalid');
+        if (callback) callback({ success: false, error: 'Extension context invalidated' });
+        return;
+      }
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Runtime error:', chrome.runtime.lastError);
+          if (callback) callback({ success: false, error: chrome.runtime.lastError.message });
+        } else {
+          if (callback) callback(response);
+        }
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      if (callback) callback({ success: false, error: error.message });
+    }
+  }
+
   // 页面加载时获取录制状态和已录制的请求
   useEffect(() => {
-    // 从 storage 获取录制状态
-    chrome.storage.local.get("isRecording", (data) => {
-      setIsRecording(data.isRecording || false)
-    })
+    if (!isExtensionContextValid()) {
+      console.warn('Extension context is not available');
+      return;
+    }
 
-    // 获取已录制的请求
-    chrome.runtime.sendMessage({ action: "getRecordedRequests" }, (response) => {
-      if (response && response.requests) {
-        setRecordedRequests(response.requests)
-      }
-    })
+    try {
+      // 从 storage 获取录制状态
+      chrome.storage.local.get("isRecording", (data) => {
+        if (chrome.runtime.lastError) {
+          console.error('Storage error:', chrome.runtime.lastError);
+        } else {
+          setIsRecording(data.isRecording || false);
+        }
+      });
+
+      // 获取已录制的请求
+      safeSendMessage({ action: "getRecordedRequests" }, (response) => {
+        if (response && response.success !== false && response.requests) {
+          setRecordedRequests(response.requests);
+        }
+      });
+    } catch (error) {
+      console.error('Error in useEffect:', error);
+    }
   }, [])
 
   // 切换录制状态
   const toggleRecording = () => {
-    const newRecordingState = !isRecording
-
-    if (newRecordingState) {
-      chrome.storage.local.set({ isRecording: true })
-      chrome.runtime.sendMessage({ action: "startRecording" })
-    } else {
-      chrome.storage.local.set({ isRecording: false })
-      chrome.runtime.sendMessage({ action: "stopRecording" })
+    if (!isExtensionContextValid()) {
+      alert("扩展上下文已失效，请重新加载扩展");
+      return;
     }
 
-    setIsRecording(newRecordingState)
+    const newRecordingState = !isRecording;
+
+    try {
+      if (newRecordingState) {
+        chrome.storage.local.set({ isRecording: true });
+        safeSendMessage({ action: "startRecording" }, (response) => {
+          if (response && response.success !== false) {
+            setIsRecording(true);
+          } else {
+            alert(`启动录制失败: ${response?.error || "未知错误"}`);
+          }
+        });
+      } else {
+        chrome.storage.local.set({ isRecording: false });
+        safeSendMessage({ action: "stopRecording" }, (response) => {
+          if (response && response.success !== false) {
+            setIsRecording(false);
+          } else {
+            alert(`停止录制失败: ${response?.error || "未知错误"}`);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling recording:', error);
+      alert(`操作失败: ${error.message}`);
+    }
   }
 
   // 回放请求
   const replayRequests = () => {
     if (recordedRequests.length === 0) {
-      alert("没有录制的请求可以回放")
-      return
+      alert("没有录制的请求可以回放");
+      return;
     }
 
-    setIsReplaying(true)
-    chrome.runtime.sendMessage({ action: "replayRequests" }, (response) => {
-      setIsReplaying(false)
+    if (!isExtensionContextValid()) {
+      alert("扩展上下文已失效，请重新加载扩展");
+      return;
+    }
+
+    setIsReplaying(true);
+    safeSendMessage({ action: "replayRequests" }, (response) => {
+      setIsReplaying(false);
       if (response && response.success) {
-        alert(`请求回放成功，状态码: ${response.status}`)
+        alert(`请求回放成功，状态码: ${response.status}`);
       } else {
-        alert(`请求回放失败: ${response?.error || "未知错误"}`)
+        alert(`请求回放失败: ${response?.error || "未知错误"}`);
       }
-    })
+    });
   }
 
   // 转发请求到 content script
   const forwardRequests = () => {
     if (recordedRequests.length === 0) {
-      alert("没有录制的请求可以转发")
-      return
+      alert("没有录制的请求可以转发");
+      return;
     }
 
-    setIsForwarding(true)
-    chrome.runtime.sendMessage({ action: "forwardRequestsToContentScript" }, (response) => {
-      setIsForwarding(false)
+    if (!isExtensionContextValid()) {
+      alert("扩展上下文已失效，请重新加载扩展");
+      return;
+    }
+
+    setIsForwarding(true);
+    safeSendMessage({ action: "forwardRequestsToContentScript" }, (response) => {
+      setIsForwarding(false);
       if (response && response.success) {
-        alert("请求已成功转发到 content script")
+        alert("请求已成功转发到 content script");
       } else {
-        alert(`请求转发失败: ${response?.error || "未知错误"}`)
+        alert(`请求转发失败: ${response?.error || "未知错误"}`);
       }
-    })
+    });
   }
 
   // 清空录制的请求
   const clearRequests = () => {
-    chrome.runtime.sendMessage({ action: "clearRecordedRequests" }, (response) => {
+    if (!isExtensionContextValid()) {
+      alert("扩展上下文已失效，请重新加载扩展");
+      return;
+    }
+
+    safeSendMessage({ action: "clearRecordedRequests" }, (response) => {
       if (response && response.success) {
-        setRecordedRequests([])
-        alert("已清空录制的请求")
+        setRecordedRequests([]);
+        alert("已清空录制的请求");
+      } else {
+        alert(`清空请求失败: ${response?.error || "未知错误"}`);
       }
-    })
+    });
   }
   return (
     <div className="min-w-[340px] max-w-[420px] p-4 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-xl shadow border border-neutral-200 font-sans">
