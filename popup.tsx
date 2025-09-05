@@ -221,6 +221,23 @@ function IndexPopup() {
       }
     });
   }
+
+  // 导航到请求记录页面
+  const navigateToRequestsPage = () => {
+    if (!isExtensionContextValid()) {
+      alert("扩展上下文已失效，请重新加载扩展");
+      return;
+    }
+
+    // 获取扩展ID
+    const extensionId = chrome.runtime.id;
+    // 构建请求记录页面的URL
+    const requestsPageUrl = `chrome-extension://${extensionId}/tabs/requests.html`;
+    
+    // 创建新标签页并导航到请求记录页面
+    chrome.tabs.create({ url: requestsPageUrl });
+  }
+
   return (
     <div className="min-w-[340px] max-w-[420px] p-4 bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-xl shadow border border-neutral-200 font-sans">
       <h2 className="text-xl font-bold mb-4">
@@ -260,6 +277,12 @@ function IndexPopup() {
           disabled={isReplaying}
         >
           清空记录
+        </button>
+        <button
+          onClick={navigateToRequestsPage}
+          className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded text-sm transition-colors"
+        >
+          查看请求记录
         </button>
       </div>
 

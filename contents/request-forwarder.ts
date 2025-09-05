@@ -194,9 +194,17 @@ function cleanup(): void {
 // 设置页面卸载监听器
 function setupPageUnloadListener(): void {
   if (typeof window !== 'undefined') {
-    window.addEventListener('beforeunload', cleanup, { passive: true });
-    window.addEventListener('unload', cleanup, { passive: true });
+    // 使用 pagehide 和 visibilitychange 事件替代 beforeunload 和 unload
     window.addEventListener('pagehide', cleanup, { passive: true });
+    
+    // visibilitychange 事件处理页面可见性变化
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        cleanup();
+      }
+    };
+    
+    window.addEventListener('visibilitychange', handleVisibilityChange, { passive: true });
   }
 }
 
