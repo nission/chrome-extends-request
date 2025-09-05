@@ -1,6 +1,43 @@
 import { useEffect, useState } from "react"
 import "./styles/globals.css"
 
+// 设置全局错误处理器
+(() => {
+  try {
+    // 捕获未处理的错误
+    window.addEventListener('error', (event) => {
+      const error = event.error;
+      if (error && error.message && error.message.includes('Extension context invalidated')) {
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+      }
+    }, true);
+
+    // 捕获未处理的 Promise 拒绝
+    window.addEventListener('unhandledrejection', (event) => {
+      const reason = event.reason;
+      if (reason && reason.message && reason.message.includes('Extension context invalidated')) {
+        event.preventDefault();
+        return false;
+      }
+    }, true);
+
+    // 重写 console.error 来过滤扩展上下文错误
+    const originalConsoleError = console.error;
+    console.error = function(...args: any[]) {
+      const message = args.join(' ');
+      if (message.includes('Extension context invalidated') ||
+          message.includes('context invalidated')) {
+        return;
+      }
+      originalConsoleError.apply(console, args);
+    };
+  } catch (error) {
+    // 静默处理
+  }
+})();
+
 interface RecordedRequest {
   url: string;
   method: string;
@@ -15,7 +52,7 @@ function IndexPopup() {
   const [isReplaying, setIsReplaying] = useState(false)
   const [isForwarding, setIsForwarding] = useState(false)
 
-  // 检查扩展上下文是否有效
+  // 检查扩展上下文是否有效（静默版本）
   const isExtensionContextValid = (): boolean => {
     try {
       return !!(chrome && chrome.runtime && chrome.runtime.id);
@@ -24,57 +61,75 @@ function IndexPopup() {
     }
   }
 
-  // 安全的消息发送函数
+  // 安全的消息发送函数（静默版本）
   const safeSendMessage = (message: any, callback?: (response: any) => void) => {
     try {
       if (!isExtensionContextValid()) {
-        console.warn('Extension context is invalid');
         if (callback) callback({ success: false, error: 'Extension context invalidated' });
         return;
       }
       chrome.runtime.sendMessage(message, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error('Runtime error:', chrome.runtime.lastError);
-          if (callback) callback({ success: false, error: chrome.runtime.lastError.message });
+        if (chrome.runtime.lastError || !isExtensionContextValid()) {
+          if (callback) callback({ success: false, error: 'Extension context invalidated' });
         } else {
           if (callback) callback(response);
         }
       });
     } catch (error) {
-      console.error('Error sending message:', error);
-      if (callback) callback({ success: false, error: error.message });
+      if (callback) callback({ success: false, error: 'Message sending failed' });
     }
   }
 
-  // 页面加载时获取录制状态和已录制的请求
-  useEffect(() => {
-    if (!isExtensionContextValid()) {
-      console.warn('Extension context is not available');
-      return;
-    }
-
+  // 安全的存储操作
+  const safeStorageGet = (key: string, callback: (result: any) => void) => {
     try {
-      // 从 storage 获取录制状态
-      chrome.storage.local.get("isRecording", (data) => {
-        if (chrome.runtime.lastError) {
-          console.error('Storage error:', chrome.runtime.lastError);
+      if (!isExtensionContextValid()) {
+        callback({});
+        return;
+      }
+      chrome.storage.local.get(key, (data) => {
+        if (chrome.runtime.lastError || !isExtensionContextValid()) {
+          callback({});
         } else {
-          setIsRecording(data.isRecording || false);
-        }
-      });
-
-      // 获取已录制的请求
-      safeSendMessage({ action: "getRecordedRequests" }, (response) => {
-        if (response && response.success !== false && response.requests) {
-          setRecordedRequests(response.requests);
+          callback(data);
         }
       });
     } catch (error) {
-      console.error('Error in useEffect:', error);
+      callback({});
     }
+  }
+
+  // 安全的存储设置
+  const safeStorageSet = (data: any) => {
+    try {
+      if (isExtensionContextValid()) {
+        chrome.storage.local.set(data);
+      }
+    } catch (error) {
+      // 静默处理错误
+    }
+  }
+
+  // 页面加载时获取录制状态和已录制的请求（静默版本）
+  useEffect(() => {
+    if (!isExtensionContextValid()) {
+      return;
+    }
+
+    // 从 storage 获取录制状态
+    safeStorageGet("isRecording", (data) => {
+      setIsRecording(data.isRecording || false);
+    });
+
+    // 获取已录制的请求
+    safeSendMessage({ action: "getRecordedRequests" }, (response) => {
+      if (response && response.success !== false && response.requests) {
+        setRecordedRequests(response.requests);
+      }
+    });
   }, [])
 
-  // 切换录制状态
+  // 切换录制状态（优化版本）
   const toggleRecording = () => {
     if (!isExtensionContextValid()) {
       alert("扩展上下文已失效，请重新加载扩展");
@@ -83,33 +138,28 @@ function IndexPopup() {
 
     const newRecordingState = !isRecording;
 
-    try {
-      if (newRecordingState) {
-        chrome.storage.local.set({ isRecording: true });
-        safeSendMessage({ action: "startRecording" }, (response) => {
-          if (response && response.success !== false) {
-            setIsRecording(true);
-          } else {
-            alert(`启动录制失败: ${response?.error || "未知错误"}`);
-          }
-        });
-      } else {
-        chrome.storage.local.set({ isRecording: false });
-        safeSendMessage({ action: "stopRecording" }, (response) => {
-          if (response && response.success !== false) {
-            setIsRecording(false);
-          } else {
-            alert(`停止录制失败: ${response?.error || "未知错误"}`);
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error toggling recording:', error);
-      alert(`操作失败: ${error.message}`);
+    if (newRecordingState) {
+      safeStorageSet({ isRecording: true });
+      safeSendMessage({ action: "startRecording" }, (response) => {
+        if (response && response.success !== false) {
+          setIsRecording(true);
+        } else {
+          alert(`启动录制失败: ${response?.error || "扩展上下文失效"}`);
+        }
+      });
+    } else {
+      safeStorageSet({ isRecording: false });
+      safeSendMessage({ action: "stopRecording" }, (response) => {
+        if (response && response.success !== false) {
+          setIsRecording(false);
+        } else {
+          alert(`停止录制失败: ${response?.error || "扩展上下文失效"}`);
+        }
+      });
     }
   }
 
-  // 回放请求
+  // 回放请求（优化版本）
   const replayRequests = () => {
     if (recordedRequests.length === 0) {
       alert("没有录制的请求可以回放");
@@ -127,12 +177,12 @@ function IndexPopup() {
       if (response && response.success) {
         alert(`请求回放成功，状态码: ${response.status}`);
       } else {
-        alert(`请求回放失败: ${response?.error || "未知错误"}`);
+        alert(`请求回放失败: ${response?.error || "扩展上下文失效"}`);
       }
     });
   }
 
-  // 转发请求到 content script
+  // 转发请求到 content script（优化版本）
   const forwardRequests = () => {
     if (recordedRequests.length === 0) {
       alert("没有录制的请求可以转发");
@@ -150,12 +200,12 @@ function IndexPopup() {
       if (response && response.success) {
         alert("请求已成功转发到 content script");
       } else {
-        alert(`请求转发失败: ${response?.error || "未知错误"}`);
+        alert(`请求转发失败: ${response?.error || "扩展上下文失效"}`);
       }
     });
   }
 
-  // 清空录制的请求
+  // 清空录制的请求（优化版本）
   const clearRequests = () => {
     if (!isExtensionContextValid()) {
       alert("扩展上下文已失效，请重新加载扩展");
@@ -167,7 +217,7 @@ function IndexPopup() {
         setRecordedRequests([]);
         alert("已清空录制的请求");
       } else {
-        alert(`清空请求失败: ${response?.error || "未知错误"}`);
+        alert(`清空请求失败: ${response?.error || "扩展上下文失效"}`);
       }
     });
   }

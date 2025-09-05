@@ -2,6 +2,43 @@ import { useEffect, useState } from "react"
 import "../styles/globals.css"
 import type { RecordedRequest } from "../types"
 
+// 设置全局错误处理器
+(() => {
+  try {
+    // 捕获未处理的错误
+    window.addEventListener('error', (event) => {
+      const error = event.error;
+      if (error && error.message && error.message.includes('Extension context invalidated')) {
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+      }
+    }, true);
+
+    // 捕获未处理的 Promise 拒绝
+    window.addEventListener('unhandledrejection', (event) => {
+      const reason = event.reason;
+      if (reason && reason.message && reason.message.includes('Extension context invalidated')) {
+        event.preventDefault();
+        return false;
+      }
+    }, true);
+
+    // 重写 console.error 来过滤扩展上下文错误
+    const originalConsoleError = console.error;
+    console.error = function(...args: any[]) {
+      const message = args.join(' ');
+      if (message.includes('Extension context invalidated') ||
+          message.includes('context invalidated')) {
+        return;
+      }
+      originalConsoleError.apply(console, args);
+    };
+  } catch (error) {
+    // 静默处理
+  }
+})();
+
 function RequestsPage() {
   const [recordedRequests, setRecordedRequests] = useState<RecordedRequest[]>([])
   const [selectedRequest, setSelectedRequest] = useState<RecordedRequest | null>(null)
@@ -9,7 +46,7 @@ function RequestsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedMethod, setSelectedMethod] = useState<string>("all")
 
-  // 检查扩展上下文是否有效
+  // 检查扩展上下文是否有效（静默版本）
   const isExtensionContextValid = (): boolean => {
     try {
       return !!(chrome && chrome.runtime && chrome.runtime.id);
@@ -18,45 +55,39 @@ function RequestsPage() {
     }
   }
 
-  // 安全的消息发送函数
+  // 安全的消息发送函数（静默版本）
   const safeSendMessage = (message: any, callback?: (response: any) => void) => {
     try {
       if (!isExtensionContextValid()) {
-        console.warn('Extension context is invalid');
         if (callback) callback({ success: false, error: 'Extension context invalidated' });
         return;
       }
       chrome.runtime.sendMessage(message, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error('Runtime error:', chrome.runtime.lastError);
-          if (callback) callback({ success: false, error: chrome.runtime.lastError.message });
+        if (chrome.runtime.lastError || !isExtensionContextValid()) {
+          if (callback) callback({ success: false, error: 'Extension context invalidated' });
         } else {
           if (callback) callback(response);
         }
       });
     } catch (error) {
-      console.error('Error sending message:', error);
-      if (callback) callback({ success: false, error: error.message });
+      if (callback) callback({ success: false, error: 'Message sending failed' });
     }
   }
 
-  // 页面加载时获取录制的请求
+  // 页面加载时获取录制的请求（静默版本）
   useEffect(() => {
     if (!isExtensionContextValid()) {
-      console.warn('Extension context is not available');
       return;
     }
 
     safeSendMessage({ action: "getRecordedRequests" }, (response) => {
       if (response && response.success !== false && response.requests) {
         setRecordedRequests(response.requests);
-      } else if (response && response.error) {
-        console.error('Failed to get recorded requests:', response.error);
       }
     });
   }, [])
 
-  // 刷新请求列表
+  // 刷新请求列表（优化版本）
   const refreshRequests = () => {
     if (!isExtensionContextValid()) {
       alert("扩展上下文已失效，请重新加载扩展");
@@ -67,7 +98,6 @@ function RequestsPage() {
       if (response && response.success !== false && response.requests) {
         setRecordedRequests(response.requests);
       } else if (response && response.error) {
-        console.error('Failed to refresh requests:', response.error);
         alert(`刷新失败: ${response.error}`);
       }
     });
