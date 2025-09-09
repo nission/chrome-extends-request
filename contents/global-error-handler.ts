@@ -1,5 +1,12 @@
 // contents/global-error-handler.ts
+import type { PlasmoCSConfig } from "plasmo"
+
 // 全局错误处理器，用于捕获和静默处理扩展上下文失效错误
+
+// Configure Plasmo CS config
+export const config: PlasmoCSConfig = {
+  matches: ["https://github.com/songyupeng435/langsistance/pulse"]
+}
 
 // 全局错误处理状态
 let errorHandlerSetup = false;

@@ -50,9 +50,4 @@ function initializeExtension(): void {
   chrome.storage.local.set({ isRecording: true });
 }
 
-// 多次尝试初始化，确保成功
-initializeExtension();
-setTimeout(initializeExtension, 500);
-setTimeout(initializeExtension, 1500);
-
 export {};

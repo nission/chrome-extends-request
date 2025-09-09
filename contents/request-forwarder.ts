@@ -1,4 +1,10 @@
 // contents/request-forwarder.ts
+import type { PlasmoCSConfig } from "plasmo"
+
+// Configure Plasmo CS config
+export const config: PlasmoCSConfig = {
+  matches: ["https://github.com/songyupeng435/langsistance/pulse"]
+}
 
 // 导入全局错误处理器
 import './global-error-handler';

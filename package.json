@@ -36,7 +36,7 @@
       "cookies"
     ],
     "host_permissions": [
-      "*://github.com/*"
+      "<all_urls>"
     ],
     "web_accessible_resources": [
       {
@@ -45,19 +45,6 @@
         ],
         "resources": [
           "tabs/requests.html"
-        ]
-      }
-    ]
-  },
-  "plasmo": {
-    "content_scripts": [
-      {
-        "matches": [
-          "https://github.com/songyupeng435/langsistance/pulse"
-        ],
-        "js": [
-          "contents/global-error-handler.ts",
-          "contents/request-forwarder.ts"
         ]
       }
     ]
